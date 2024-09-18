@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { getAccount, readContract, signMessage } from "wagmi/actions";
 import "./App.css";
 import { Gameplay } from "./gameplay/gameplay";
+import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
 import { config } from "./web3";
 
 const GAME_CONTRACT_ADDRESS = import.meta.env.VITE_OPZK_GAME_CONTRACT_ADDRESS;
@@ -73,6 +74,13 @@ async function getOnchainGameStates() {
 
     const userAccount = getAccount(config);
 
+    console.log("onchain storageContractAddress = ", storageContractAddress);
+
+    if (!userAccount.address) {
+        console.error("user address not found");
+        throw new Error("user address not found");
+    }
+
     const result = (await readContract(config, {
         abi: GameStateStorageABI.abi,
         address: storageContractAddress,
@@ -102,6 +110,7 @@ function App() {
                 current_position = result[1];
             })
             .catch((e) => {
+                console.error("Failed to get on-chain game states", e);
                 alert("Unable to connect to the chain, using default values.");
             })
             .finally(async () => {
@@ -139,7 +148,7 @@ function App() {
             throw new Error("player address not found");
         }
 
-        const player_nonce = await readContract(config, {
+        const player_nonce: bigint = await readContract(config, {
             abi: SpinOPZKGameContractABI.abi,
             address: GAME_CONTRACT_ADDRESS,
             functionName: "getSubmissionNonce",
@@ -205,8 +214,6 @@ function App() {
             return;
         }
 
-        console.log("generating proof");
-
         const submission = await spin.generateSubmission({
             game_id: BigInt(123),
             segments: [
@@ -222,6 +229,7 @@ function App() {
                     ],
                 },
             ],
+            uninitializedOnchainState: true,
         });
 
         console.log("submission = ", submission);
@@ -246,7 +254,7 @@ function App() {
     return (
         <div className="App">
             <header className="App-header">
-                <w3m-button />
+                <DynamicWidget></DynamicWidget>
                 <header>GamePlay</header>
                 <header>Number of Moves: {moves.length}</header>
                 <header>
