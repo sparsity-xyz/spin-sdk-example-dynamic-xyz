@@ -3,9 +3,8 @@ import {
     SpinOPZKProver,
     SpinOPZKProverInput,
     SpinOPZKProverOutput,
-    decodeBytesToU64Array,
     SpinOPZKGameContractABI,
-    GameStateStorageABI,
+    getOnchainStatesWagmi,
 } from "@zkspin/lib";
 import { ethers } from "ethers";
 import { useEffect, useState } from "react";
@@ -17,6 +16,7 @@ import { config } from "./web3";
 
 const GAME_CONTRACT_ADDRESS = import.meta.env.VITE_OPZK_GAME_CONTRACT_ADDRESS;
 const OPZK_OPERATOR_URL = import.meta.env.VITE_OPZK_OPERATOR_URL;
+const OPZK_GAME_ID = BigInt(import.meta.env.VITE_OPZK_GAME_GAME_ID);
 
 interface GameState {
     total_steps: bigint;
@@ -62,41 +62,6 @@ async function submit_to_operator(
     return data;
 }
 
-/* This function is used to get the on-chain game states */
-async function getOnchainGameStates() {
-    // return [BigInt(0), BigInt(0)];
-    const storageContractAddress = (await readContract(config, {
-        abi: SpinOPZKGameContractABI.abi,
-        address: GAME_CONTRACT_ADDRESS,
-        functionName: "getStorageContract",
-        args: [],
-    })) as `0x${string}`;
-
-    const userAccount = getAccount(config);
-
-    console.log("onchain storageContractAddress = ", storageContractAddress);
-
-    if (!userAccount.address) {
-        console.error("user address not found");
-        throw new Error("user address not found");
-    }
-
-    const result = (await readContract(config, {
-        abi: GameStateStorageABI.abi,
-        address: storageContractAddress,
-        functionName: "getStates",
-        args: [userAccount.address],
-    })) as string;
-
-    console.log("onchain result = ", result);
-    // result is in bytes, abi decode it, state is 2 u64 bigint
-    const decoded = decodeBytesToU64Array(result, 2);
-
-    console.log("onchain state = ", decoded);
-
-    return decoded;
-}
-
 let spin: SpinGame<SpinOPZKProverInput, SpinOPZKProverOutput>;
 
 function App() {
@@ -104,7 +69,14 @@ function App() {
         let total_steps = BigInt(0);
         let current_position = BigInt(0);
 
-        getOnchainGameStates()
+        getOnchainStatesWagmi(
+            getAccount(config).address!,
+            GAME_CONTRACT_ADDRESS,
+            OPZK_GAME_ID,
+            2,
+            readContract,
+            config
+        )
             .then(async (result): Promise<any> => {
                 total_steps = result[0];
                 current_position = result[1];
@@ -215,7 +187,7 @@ function App() {
         }
 
         const submission = await spin.generateSubmission({
-            game_id: BigInt(123),
+            game_id: OPZK_GAME_ID,
             segments: [
                 {
                     initial_states: [
@@ -237,18 +209,6 @@ function App() {
         const submissionResult = await submit_to_operator(submission);
 
         console.log("submissionResult = ", submissionResult);
-
-        // wait for the transaction to be broadcasted, better way is to use event listener
-        await new Promise((r) => setTimeout(r, 1000));
-
-        const gameStates = await getOnchainGameStates();
-
-        setOnChainGameStates({
-            total_steps: gameStates[0],
-            current_position: gameStates[1],
-        });
-
-        // await spin.resetGame();
     };
 
     return (
