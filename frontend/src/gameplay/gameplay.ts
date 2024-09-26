@@ -7,10 +7,6 @@ import {
     get_game_state,
 } from "../../../gameplay/export/js/esm/gameplay";
 
-export interface GamePlayContructor {
-    callback: () => void;
-}
-
 export class Gameplay extends GameplayAbstract {
     constructor() {
         super();

@@ -3,20 +3,18 @@ import {
     SpinOPZKProver,
     SpinOPZKProverInput,
     SpinOPZKProverOutput,
-    SpinOPZKGameContractABI,
-    getOnchainStatesWagmi,
 } from "@zkspin/lib";
-import { ethers } from "ethers";
-import { useEffect, useState } from "react";
-import { getAccount, readContract, signMessage } from "wagmi/actions";
-import "./App.css";
-import { Gameplay } from "./gameplay/gameplay";
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
-import { config } from "./web3";
 
-const GAME_CONTRACT_ADDRESS = import.meta.env.VITE_OPZK_GAME_CONTRACT_ADDRESS;
-const OPZK_OPERATOR_URL = import.meta.env.VITE_OPZK_OPERATOR_URL;
-const OPZK_GAME_ID = BigInt(import.meta.env.VITE_OPZK_GAME_GAME_ID);
+import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
+import { useEffect, useState } from "react";
+import "./App.css";
+import { OPZK_GAME_ID, OPZK_OPERATOR_URL } from "./config";
+import { Gameplay } from "./gameplay/gameplay";
+import {
+    getOnchainGameState,
+    getPlayerNonce,
+    getPlayerSignature,
+} from "./web3";
 
 interface GameState {
     total_steps: bigint;
@@ -27,8 +25,6 @@ interface GameState {
 async function submit_to_operator(
     submission: SpinOPZKProverOutput
 ): Promise<any> {
-    console.log("submission = ", submission);
-
     const response = await fetch(`${OPZK_OPERATOR_URL}/submitTransaction`, {
         method: "POST",
         headers: {
@@ -57,9 +53,7 @@ async function submit_to_operator(
             `Failed to submit transaction: ${response.statusText} ${errorMessage}`
         );
     }
-    const data = await response.json();
-    console.log(data);
-    return data;
+    return await response.json();
 }
 
 let spin: SpinGame<SpinOPZKProverInput, SpinOPZKProverOutput>;
@@ -69,14 +63,7 @@ function App() {
         let total_steps = BigInt(0);
         let current_position = BigInt(0);
 
-        getOnchainStatesWagmi(
-            getAccount(config).address!,
-            GAME_CONTRACT_ADDRESS,
-            OPZK_GAME_ID,
-            2,
-            readContract,
-            config
-        )
+        getOnchainGameState()
             .then(async (result): Promise<any> => {
                 total_steps = result[0];
                 current_position = result[1];
@@ -86,9 +73,6 @@ function App() {
                 alert("Unable to connect to the chain, using default values.");
             })
             .finally(async () => {
-                console.log("total_steps = ", total_steps);
-                console.log("current_position = ", current_position);
-
                 setOnChainGameStates({
                     total_steps,
                     current_position,
@@ -108,50 +92,10 @@ function App() {
                 await spin.newGame({
                     initialStates: [total_steps, current_position],
                 });
+
                 updateDisplay();
             });
     }, []);
-
-    const getPlayerNonce = async () => {
-        const player_address = getAccount(config).address;
-
-        if (!player_address) {
-            console.error("player address not found");
-            throw new Error("player address not found");
-        }
-
-        const player_nonce: bigint = await readContract(config, {
-            abi: SpinOPZKGameContractABI.abi,
-            address: GAME_CONTRACT_ADDRESS,
-            functionName: "getSubmissionNonce",
-            args: [player_address],
-        });
-
-        console.log("nonce = ", player_nonce);
-
-        return player_nonce;
-    };
-
-    const getPlayerSignature = async (submissionHash: string) => {
-        // get player address
-
-        const player_address = getAccount(config).address;
-
-        if (!player_address) {
-            console.error("player address not found");
-            throw new Error("player address not found");
-        }
-
-        const player_signature = await signMessage(config, {
-            message: {
-                raw: ethers.getBytes(submissionHash),
-            },
-        });
-
-        console.log("signature = ", player_signature);
-
-        return { player_address, player_signature };
-    };
 
     const [gameState, setGameState] = useState<GameState>({
         total_steps: BigInt(0),
